@@ -13,10 +13,10 @@ mod structured_data;
 mod timestamp;
 
 use chrono::prelude::*;
-use nom::{IResult, Parser as _, branch::alt};
+use nom::{branch::alt, IResult, Parser as _};
 
 pub use message::{Message, Protocol};
-pub use pri::{SyslogFacility, SyslogSeverity, decompose_pri};
+pub use pri::{decompose_pri, SyslogFacility, SyslogSeverity};
 pub use procid::ProcId;
 pub use structured_data::StructuredElement;
 pub use timestamp::IncompleteDate;
@@ -172,4 +172,53 @@ where
     parse(input, get_year, tz, variant)
         .map(|(_, result)| result)
         .map_err(|_| "unable to parse input as valid syslog message".to_string())
+}
+
+///
+/// Parse the message.
+///
+/// # Arguments
+///
+/// * input - the string containing the message.
+/// * tz - a default timezone to use if the parsed timestamp does not specify one
+/// * get_year - a function that is called if the parsed message contains a date with no year.
+///   the function takes a (month, date, hour, minute, second) tuple and should return the year to use.
+/// * variant - the variant of message we are expecting to receive.
+///
+pub fn parse_message_with_result_year_tz<F, Tz: TimeZone + Copy>(
+    input: &str,
+    get_year: F,
+    tz: Option<Tz>,
+    variant: Variant,
+) -> IResult<&str, Message<&str>>
+where
+    F: FnOnce(IncompleteDate) -> i32 + Copy,
+    DateTime<FixedOffset>: From<DateTime<Tz>>,
+{
+    parse(input, get_year, tz, variant)
+}
+
+///
+/// Parse the message.
+///
+/// # Arguments
+///
+/// * input - the string containing the message.
+/// * get_year - a function that is called if the parsed message contains a date with no year.
+///   the function takes a (month, date, hour, minute, second) tuple and should return the year to use.
+/// * variant - the variant of message we are expecting to receive.
+///
+pub fn parse_message_with_result_year<F>(
+    input: &str,
+    get_year: F,
+    variant: Variant,
+) -> IResult<&str, Message<&str>>
+where
+    F: FnOnce(IncompleteDate) -> i32 + Copy,
+{
+    parse_message_with_result_year_tz::<_, Local>(input, get_year, None, variant)
+}
+
+pub fn parse_message_with_result(input: &str, variant: Variant) -> IResult<&str, Message<&str>> {
+    parse_message_with_result_year(&input, |_| Local::now().year(), variant)
 }
